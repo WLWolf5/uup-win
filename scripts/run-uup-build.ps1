@@ -121,9 +121,6 @@ if (-not (Test-Path -LiteralPath $packagePath)) {
 }
 
 $extractPath = Join-Path $workPath "package"
-if (Test-Path -LiteralPath $extractPath) {
-  Remove-Item -LiteralPath $extractPath -Recurse -Force
-}
 
 $converter = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter "uup_download_windows.cmd" | Select-Object -First 1
 if (-not $converter) {
