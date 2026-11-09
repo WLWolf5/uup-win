@@ -1,0 +1,191 @@
+name: Build UUP ISO
+run-name: Build all UUP ISOs - amd64 ${{ github.event.inputs.lang || 'zh-cn' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Windows Version
+        required: true
+        default: "10"
+        type: choice
+        options:
+          - "11"
+          - "10"
+          - "server"
+      code:
+        description: Version Code
+        required: true
+        default: 22H2
+        type: string
+      edition:
+        description: Windows Base Pack
+        required: true
+        default: "professional"
+        type: choice
+        options:
+          - "professional"
+          - "core"
+          - "corecountryspecific"
+          - "ppipro"
+          - "all"
+      kms:
+        description: Windows Release Edition
+        required: true
+        default: "ProfessionalWorkstation"
+        type: choice
+        options:
+          - "ProfessionalWorkstation"
+          - "ProfessionalEducation"
+          - "Education"
+          - "Enterprise"
+          - "ServerRdsh"
+          - "IoTEnterprise"
+      arch:
+        description: Architecture
+        required: true
+        default: amd64
+        type: choice
+        options:
+          - amd64
+          - arm64
+      lang:
+        description: Language pack
+        required: true
+        default: zh-cn
+        type: choice
+        options:
+          - zh-cn
+          - en-us
+          - zh-tw
+          - ja-jp
+          - ko-kr
+          - de-de
+          - fr-fr
+          - es-es
+          - ru-ru
+          - pt-br
+      include-updates:
+        description: Include updates
+        required: true
+        default: true
+        type: boolean
+      cleanup:
+        description: Run component cleanup
+        required: true
+        default: true
+        type: boolean
+      netfx3:
+        description: Integrate .NET Framework 3.5
+        required: true
+        default: false
+        type: boolean
+      image-format:
+        description: Install image format
+        required: true
+        default: wim
+        type: choice
+        options:
+          - wim
+          - esd
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 1440
+    env:
+      TARGET: ${{ inputs.target }}
+      TARGETID: ${{ inputs.target }}-${{ inputs.code }}
+      CODE: ${{ inputs.code }}
+      KMS: ${{ inputs.kms }}
+      EDITION: ${{ inputs.edition }}
+      ARCH: ${{ inputs.arch }}
+      LANG: ${{ inputs.lang }}
+      INCLUDE_UPDATES: ${{ inputs.include-updates }}
+      CLEANUP: ${{ inputs.cleanup }}
+      NETFX3: ${{ inputs.netfx3 }}
+      IMAGE_FORMAT: ${{ inputs.image-format }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Show selected build target
+        shell: pwsh
+        run: |
+          "### UUP build target" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "- Target: ``Windows $env:TARGET $env:CODE``" >> $env:GITHUB_STEP_SUMMARY
+          "- Basepack: ``$env:EDITION``" >> $env:GITHUB_STEP_SUMMARY
+          "- Edition: ``$env:KMS``" >> $env:GITHUB_STEP_SUMMARY
+          "- Architecture: ``$env:ARCH``" >> $env:GITHUB_STEP_SUMMARY
+          "- Language: ``$env:LANG``" >> $env:GITHUB_STEP_SUMMARY
+          "- Include updates: ``$env:INCLUDE_UPDATES``" >> $env:GITHUB_STEP_SUMMARY
+          "- Component cleanup: ``$env:CLEANUP``" >> $env:GITHUB_STEP_SUMMARY
+          "- .NET Framework 3.5: ``$env:NETFX3``" >> $env:GITHUB_STEP_SUMMARY
+          "- Image format: ``$env:IMAGE_FORMAT``" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "Target: $env:TARGET"
+          Write-Host "Architecture: $env:ARCH"
+          Write-Host "Language: $env:LANG"
+      
+      - name: Download uup-tools
+        shell: pwsh
+        run: |
+          $includeUpdates = $env:INCLUDE_UPDATES -eq "true"
+          $cleanup = $env:CLEANUP -eq "true"
+          $netfx3 = $env:NETFX3 -eq "true"
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/run-uup-download.ps1 `
+          -Target $env:TARGET -Arch $env:ARCH -Lang $env:LANG `
+          -ImageFormat $env:IMAGE_FORMAT -IncludeUpdates:$includeUpdates -Cleanup:$cleanup `
+          -NetFx3:$netfx3 -Code $env:CODE -Edition $env:EDITION -KMS $env:KMS `
+          -PreserveOutput
+
+      - name: Extract uup-tools
+        shell: pwsh
+        run: |
+          $includeUpdates = $env:INCLUDE_UPDATES -eq "true"
+          $cleanup = $env:CLEANUP -eq "true"
+          $netfx3 = $env:NETFX3 -eq "true"
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/run-uup-extract.ps1 `
+          -WorkDir "uup-work-$env:TARGETID" -OutputDir "uup-output-$env:TARGETID" -ImageFormat $env:IMAGE_FORMAT `
+          -IncludeUpdates:$includeUpdates -Cleanup:$cleanup -NetFx3:$netfx3 `
+          -KMS $env:KMS
+
+      - name: Cache
+        uses: actions/cache@v6
+        with:
+          # A list of files, directories, and wildcard patterns to cache and restore
+          path: uup-work-${{ inputs.target }}-${{ inputs.code }}/package/UUPs
+          # An explicit key for restoring and saving the cache
+          key: Windows-${{ inputs.target }}-${{ inputs.code }}
+
+      - name: Build and publish selected target
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $includeUpdates = $env:INCLUDE_UPDATES -eq "true"
+          $cleanup = $env:CLEANUP -eq "true"
+          $netfx3 = $env:NETFX3 -eq "true"
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/run-uup-main.ps1 `
+          -Target $env:TARGET -Arch $env:ARCH -Lang $env:LANG `
+          -ImageFormat $env:IMAGE_FORMAT -IncludeUpdates:$includeUpdates -Cleanup:$cleanup `
+          -NetFx3:$netfx3 -Code $env:CODE -Edition $env:EDITION -KMS $env:KMS `
+          -PreserveOutput
+
+      - name: Upload selected target artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: uup-iso-${{ inputs.target }}-${{ inputs.code }}-${{ inputs.arch }}-${{ inputs.lang }}-${{ inputs.image-format }}
+          path: uup-output-${{ inputs.target }}-${{ inputs.code }}/*
+          if-no-files-found: error
+          retention-days: 7
