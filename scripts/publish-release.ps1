@@ -10,7 +10,7 @@ if (-not $env:GITHUB_TOKEN) {
 
 $env:GH_TOKEN = $env:GITHUB_TOKEN
 $maxReleaseAssetBytes = 1900MB
-$largeFiles = Get-ChildItem -LiteralPath $Directory -Filter "*.iso" -File | Where-Object {
+$largeFiles = Get-ChildItem -LiteralPath $OutputDir -Filter "*.iso" -File | Where-Object {
   $_.Length -gt $MaxBytes
 }
 
