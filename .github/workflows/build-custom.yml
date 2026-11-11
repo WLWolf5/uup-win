@@ -88,6 +88,11 @@ on:
         options:
           - wim
           - esd
+      cache-enable:
+        description: 'Enable Cache (10GB Limit, not recommend)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -161,6 +166,7 @@ jobs:
 
       - name: Cache
         uses: actions/cache@v6
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cache-enable }}
         with:
           # A list of files, directories, and wildcard patterns to cache and restore
           path: uup-work-${{ inputs.target }}-${{ inputs.code }}/package/UUPs
